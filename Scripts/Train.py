@@ -261,7 +261,7 @@ def save_metadata(config, results, save_dir='models'):
 def main():
     # Configuration
     config = {
-        'data_dir': Path('raw'),
+        'data_dir': Path('/media/abdullahsk/Abdullah/GitHub/GlaucomaDetection/data/raw'),
         'log_dir': Path('logs/run_001'),
         'model_dir': Path('models'),
         'num_epochs': 100,

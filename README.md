@@ -1,42 +1,18 @@
 # Glaucoma Detection using Deep Learning
 
 ## Project Overview
-This project implements a deep learning solution for automated detection of glaucoma from retinal images. It combines a custom DARTSNet architecture with attention mechanisms and advanced augmentation techniques to handle class imbalance in medical imaging data.
+This project implements a deep learning solution for automated detection of glaucoma from retinal images. It combines a custom HybridNet architecture with attention mechanisms and advanced augmentation techniques to handle class imbalance in medical imaging data.
 
 ## Dataset Availability
 
-- Note! ``` You can use any dataset but have to be orgonized in the stated manner mentioned below. ```
-
 1. [https://drive.google.com/drive/folders/1hfjjTqPAWyVOIhMe-t37NL2RKV_5J7Zz?usp=sharing] ``` Open Access ```
-2. [https://drive.google.com/drive/folders/1P7ClDUUHXE40cinDujZZApUdLBugltEa?usp=sharing] ``` Resticted access ```
+<!-- 2. [https://drive.google.com/drive/folders/1P7ClDUUHXE40cinDujZZApUdLBugltEa?usp=sharing] ``` Restricted access ``` -->
 
-## Directory Structure
-```
-.
-├── data/              # Data directory
-│   ├── raw/          # Raw image data
-│   └── processed/    # Preprocessed datasets
-├── logs/             # Training logs and metrics
-├── models/           # Saved model checkpoints
-├── Research Material/# Background research and papers
-├── Scripts/          # Source code
-│   ├── Analysis.py   # Data analysis utilities
-│   ├── Augmenter.py  # Data augmentation pipeline
-│   ├── DataLoader.py # Dataset implementations
-│   ├── losses.py     # Custom loss functions
-│   ├── Model.py      # Neural network architecture
-│   ├── Train.py      # Training script
-│   ├── visualization.py  # Visualization tools
-│   └── visualize.py  # Additional visualization utilities
-├── .gitignore        # Git ignore rules
-├── README.md         # Project documentation
-└── requirements.txt  # Project dependencies
-```
 
 ## Key Features
 
 ### Model Architecture
-- Custom DARTSNet implementation with attention mechanisms
+- Custom HybridNet implementation combining VGG, DenseNet, ResNet, and Inception architectures
 - Squeeze-and-Excitation blocks for channel attention
 - Spatial attention mechanisms for feature refinement
 - Stochastic depth for improved regularization
@@ -54,7 +30,7 @@ This project implements a deep learning solution for automated detection of glau
 
 ### Training
 - Focal Loss implementation for handling class imbalance
-- Learning rate scheduling with warmup
+- Learning rate scheduling with OneCycleLR
 - Early stopping and model checkpointing
 - TensorBoard integration for monitoring:
   - Training/validation metrics
@@ -66,7 +42,7 @@ This project implements a deep learning solution for automated detection of glau
 
 1. Clone the repository:
 ```bash
-git clone [https://gitlab.com/rp20241/GlaucomaDetection.git]
+git clone https://gitlab.com/rp20241/GlaucomaDetection.git
 cd glaucoma-detection
 ```
 
@@ -74,7 +50,7 @@ cd glaucoma-detection
 ```bash
 python -m venv venv
 # On Windows:
-venv\Scripts\activate
+venvScriptsactivate
 # On Unix or MacOS:
 source venv/bin/activate
 ```
@@ -110,7 +86,7 @@ python Scripts/visualize.py --model-path models/best_model.pth
 
 ### Network Architecture
 - Input Resolution: 224x224x3
-- Backbone: Custom DARTSNet
+- Backbone: Custom HybridNet (VGG, DenseNet, ResNet, Inception hybrid)
 - Attention Mechanisms:
   - Channel attention (SE blocks)
   - Spatial attention
@@ -124,6 +100,7 @@ python Scripts/visualize.py --model-path models/best_model.pth
 - Early Stopping Patience: 15
 - Loss Function: Focal Loss
 - Optimizer: AdamW
+- Scheduler: OneCycleLR
 
 ## Scripts Description
 
@@ -152,22 +129,6 @@ pip install -r requirements.txt
 - Include docstrings for all functions/classes
 - Add comments for complex logic
 
-### Testing
-1. Run unit tests:
-```bash
-pytest tests/
-```
-
-2. Run integration tests:
-```bash
-pytest tests/integration/
-```
-
-### Logging
-- Use the provided logger in `utils/logger.py`
-- Log all important events and metrics
-- Include appropriate log levels
-
 ## Performance Metrics
 
 ### Resource Requirements
@@ -180,8 +141,8 @@ pytest tests/integration/
 - Multi-GPU scaling available
 
 ### Model Size
-- Parameters: 45.5M
-- Disk Space: 173.48MB
+- Parameters: ~45.5M (may vary slightly due to hybrid architecture)
+- Disk Space: ~175MB
 
 ## Troubleshooting
 
@@ -224,9 +185,6 @@ Planned enhancements:
 - [ ] Multi-GPU training support
 - [ ] Model quantization
 - [ ] ONNX export
-- [ ] REST API deployment
-- [ ] Web interface
-- [ ] Mobile deployment
 - [ ] Additional data augmentation techniques
 - [ ] Model interpretability tools
 
@@ -247,7 +205,5 @@ This project builds upon various open-source libraries and research papers. Spec
 - torchvision contributors
 - Medical imaging research community
 
-
-
-
 <!-- export HSA_OVERRIDE_GFX_VERSION=10.3.0 -->
+

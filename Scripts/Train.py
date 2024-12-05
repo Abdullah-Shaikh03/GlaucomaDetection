@@ -11,10 +11,10 @@ import json
 from datetime import datetime
 import random
 from losses import FocalLoss
-from Model import DARTSNet, get_model
+from Model import get_model
 from DataLoader import get_data_loaders
-# from visualization import visualize_feature_maps
 from torch.optim.lr_scheduler import OneCycleLR
+import os
 
 class EarlyStopping:
     def __init__(self, patience=7, min_delta=0, verbose=False):
@@ -35,12 +35,6 @@ class EarlyStopping:
         else:
             self.best_loss = val_loss
             self.counter = 0
-
-    def save_checkpoint(self, val_loss, model, path):
-        if self.verbose:
-            logging.info(f'Validation loss decreased ({self.best_loss:.6f} --> {val_loss:.6f}). Saving model ...')
-        torch.save(model.state_dict(), path)
-        self.best_loss = val_loss
 
 class Trainer:
     def __init__(self, model, train_loader, val_loader, config):
@@ -82,7 +76,7 @@ class Trainer:
     def _get_scheduler(self):
         return OneCycleLR(
             self.optimizer,
-            max_lr=self.config['learning_rate'],
+            max_lr=self.config['max_lr'],
             epochs=self.config['num_epochs'],
             steps_per_epoch=len(self.train_loader),
             pct_start=0.3,
@@ -112,7 +106,7 @@ class Trainer:
             
             self.optimizer.zero_grad()
             
-            with autocast('cuda' if torch.cuda.is_available() else 'cpu'):
+            with autocast(device_type=self.device.type):
                 outputs = self.model(inputs)
                 loss = self.criterion(outputs, targets)
             
@@ -145,8 +139,9 @@ class Trainer:
         for inputs, targets in self.val_loader:
             inputs, targets = inputs.to(self.device), targets.to(self.device)
             
-            outputs = self.model(inputs)
-            loss = self.criterion(outputs, targets)
+            with autocast(device_type=self.device.type):
+                outputs = self.model(inputs)
+                loss = self.criterion(outputs, targets)
             
             running_loss += loss.item()
             _, predicted = outputs.max(1)
@@ -187,11 +182,6 @@ class Trainer:
                     'optimizer_state_dict': self.optimizer.state_dict(),
                     'best_val_acc': self.best_val_acc,
                 }, self.config['model_dir'] / 'best_model.pth')
-            
-            # Visualize feature maps every 10 epochs
-            # if (epoch + 1) % 10 == 0:
-            #     sample_input = next(iter(self.train_loader))[0][:1].to(self.device)
-                # visualize_feature_maps(self.model, sample_input, 'layer2.1.conv2', self.writer, epoch)
             
             # Early stopping
             self.early_stopping(val_loss)
@@ -261,14 +251,15 @@ def save_metadata(config, results, save_dir='models'):
 def main():
     # Configuration
     config = {
-        'data_dir': Path('/media/abdullahsk/Abdullah/GitHub/GlaucomaDetection/data/raw'),
+        'data_dir': Path('./data/raw'),
         'log_dir': Path('logs/run_001'),
         'model_dir': Path('models'),
-        'num_epochs': 100,
-        'batch_size': 32,
-        'learning_rate': 1e-3,
-        'weight_decay': 1e-4,
-        'early_stopping_patience': 15,
+        'num_epochs': 50,
+        'batch_size': 64,
+        'learning_rate': 1e-6,
+        'max_lr': 1e-5,
+        'weight_decay': 1e-5,
+        'early_stopping_patience': 10,
         'seed': 42
     }
 

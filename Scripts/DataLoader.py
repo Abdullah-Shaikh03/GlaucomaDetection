@@ -143,11 +143,26 @@ def get_data_loaders(
 
     # Configure training sampler
     if use_balanced_sampling:
+        def get_sampler_weights(dataset):
+            labels = dataset.labels
+            class_counts = torch.bincount(torch.tensor(labels))
+            total_samples = len(labels)
+            
+            # Calculate weights for each class
+            class_weights = total_samples / (len(class_counts) * class_counts.float())
+            # Adjust weights to give more emphasis to minority class
+            class_weights[1] *= 2  # Additional boost to glaucoma class
+            
+            # Assign weights to each sample
+            weights = torch.tensor([class_weights[label] for label in labels])
+            return weights
+            
         train_sampler = WeightedRandomSampler(
-            weights=train_dataset.get_sample_weights(),
+            weights=get_sampler_weights(train_dataset),
             num_samples=len(train_dataset),
             replacement=True
         )
+        
     else:
         train_sampler = None
 

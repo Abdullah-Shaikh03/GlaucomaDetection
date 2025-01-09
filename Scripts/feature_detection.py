@@ -2,11 +2,9 @@ import matplotlib.pyplot as plt
 import numpy as np
 import cv2
 from pathlib import Path
-import torch
-from torchvision.utils import make_grid
 import logging
-from typing import Dict, List, Optional
-import seaborn as sns
+from typing import Dict, List
+import json
 
 class GlaucomaFeatureVisualizer:
     """Visualize glaucoma features and track detection performance across epochs"""

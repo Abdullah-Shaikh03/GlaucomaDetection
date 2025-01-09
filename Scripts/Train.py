@@ -14,8 +14,7 @@ from losses import FocalLoss
 from Model import get_model
 from DataLoader import get_data_loaders
 from torch.optim.lr_scheduler import OneCycleLR
-from feature_detection import GlaucomaFeatureDetector, GlaucomaFeatureVisualizer
-
+from feature_detection import GlaucomaFeatureVisualizer
 import os
 
 class EarlyStopping:
@@ -46,7 +45,8 @@ class Trainer:
         self.config = config
         self.criterion = FocalLoss(alpha=0.75, gamma=2.0)  # Updated parameters
         self.device = next(model.parameters()).device
-        self.feature_detector = GlaucomaFeatureDetector()
+        # self.feature_detector = GlaucomaFeatureDetector()  # Commented out as it is not defined
+        config['visualization_dir'] = Path('visualization_output')  # Updated parameter
         self.feature_visualizer = GlaucomaFeatureVisualizer(
             output_dir=config['visualization_dir']
         )
@@ -295,7 +295,7 @@ results, save_dir='models'):
 def main():
     # Configuration
     config = {
-        'data_dir': Path('./data/raw'),
+        'data_dir': Path('./raw'),
         'log_dir': Path('logs/run_001'),
         'model_dir': Path('models'),
         'num_epochs': 50,

@@ -3,8 +3,10 @@ import torch
 from sklearn.metrics import confusion_matrix, classification_report
 import matplotlib.pyplot as plt
 import seaborn as sns
+from torch.utils.data import DataLoader
 from Model import get_model
-from DataLoader import  get_data_loaders
+from DataLoader import GlaucomaDataset, get_data_loaders
+from torchvision import transforms
 import json
 import os
 

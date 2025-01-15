@@ -14,7 +14,6 @@ from losses import FocalLoss
 from Model import get_model
 from DataLoader import get_data_loaders
 from torch.optim.lr_scheduler import OneCycleLR
-from feature_detection import GlaucomaFeatureVisualizer
 import os
 
 class EarlyStopping:
@@ -115,6 +114,7 @@ class Trainer:
             inputs, targets = inputs.to(self.device), targets.to(self.device)
             
             self.optimizer.zero_grad()
+
             with autocast(device_type=self.device.type):
                 outputs = self.model(inputs)
                 loss = self.criterion(outputs, targets)
@@ -227,6 +227,8 @@ class Trainer:
                     'best_val_acc': self.best_val_acc,
                 }, self.config['model_dir'] / 'best_model.pth')
             
+
+            # Early stopping
             self.early_stopping(val_loss)
             if self.early_stopping.early_stop:
                 logging.info(f"Early stopping triggered after {epoch + 1} epochs")
@@ -295,7 +297,7 @@ results, save_dir='models'):
 def main():
     # Configuration
     config = {
-        'data_dir': Path('./raw'),
+        'data_dir': Path('./data/raw'),
         'log_dir': Path('logs/run_001'),
         'model_dir': Path('models'),
         'num_epochs': 50,
@@ -303,7 +305,7 @@ def main():
         'learning_rate': 1e-6,
         'max_lr': 1e-5,
         'weight_decay': 1e-5,
-        'early_stopping_patience': 15,
+        'early_stopping_patience': 10,
         'seed': 42
     }
 

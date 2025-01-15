@@ -42,9 +42,13 @@ class Trainer:
         self.train_loader = train_loader
         self.val_loader = val_loader
         self.config = config
-        self.criterion = FocalLoss(alpha=0.25, gamma=2)
+        self.criterion = FocalLoss(alpha=0.75, gamma=2.0)  # Updated parameters
         self.device = next(model.parameters()).device
-        
+        # self.feature_detector = GlaucomaFeatureDetector()  # Commented out as it is not defined
+        config['visualization_dir'] = Path('visualization_output')  # Updated parameter
+        self.feature_visualizer = GlaucomaFeatureVisualizer(
+            output_dir=config['visualization_dir']
+        )
         self.optimizer = self._get_optimizer()
         self.scheduler = self._get_scheduler()
         self.scaler = GradScaler()
@@ -54,7 +58,8 @@ class Trainer:
             patience=config['early_stopping_patience'],
             verbose=True
         )
-        
+        self.class_correct = torch.zeros(2).to(self.device)
+        self.class_total = torch.zeros(2).to(self.device)
         self.best_val_acc = 0.0
         self._setup_logging()
         
@@ -99,16 +104,23 @@ class Trainer:
         running_loss = 0.0
         correct = 0
         total = 0
-        
-        pbar = tqdm(self.train_loader, desc=f'Epoch {epoch+1}/{self.config["num_epochs"]}')
+        epoch_features = []
+
+        self.class_correct.zero_()
+        self.class_total.zero_()
+
+        pbar = tqdm(self.train_loader)
         for batch_idx, (inputs, targets) in enumerate(pbar):
             inputs, targets = inputs.to(self.device), targets.to(self.device)
             
             self.optimizer.zero_grad()
-            
+
             with autocast(device_type=self.device.type):
                 outputs = self.model(inputs)
                 loss = self.criterion(outputs, targets)
+                
+                if epoch < 5:  # Add warm-up phase loss scaling
+                    loss *= 1 + (targets == 1).float().mean() * 0.5
             
             self.scaler.scale(loss).backward()
             self.scaler.step(self.optimizer)
@@ -120,22 +132,35 @@ class Trainer:
             _, predicted = outputs.max(1)
             total += targets.size(0)
             correct += predicted.eq(targets).sum().item()
+
+            # Add per-class accuracy tracking
+            for class_idx in range(2):
+                mask = targets == class_idx
+                self.class_correct[class_idx] += (predicted[mask] == targets[mask]).sum()
+                self.class_total[class_idx] += mask.sum()
+
+            class_0_acc = (self.class_correct[0] / self.class_total[0]).item() * 100
+            class_1_acc = (self.class_correct[1] / self.class_total[1]).item() * 100
             
             pbar.set_postfix({
                 'loss': running_loss/(batch_idx+1),
-                'acc': 100.*correct/total,
+                'non_glau_acc': f'{class_0_acc:.2f}%',
+                'glau_acc': f'{class_1_acc:.2f}%',
                 'lr': self.optimizer.param_groups[0]['lr']
             })
-        
+
+        self.feature_visualizer.update_history(epoch_features)
+            
         return running_loss/len(self.train_loader), 100.*correct/total
 
     @torch.no_grad()
     def validate(self):
         self.model.eval()
         running_loss = 0.0
+        conf_matrix = torch.zeros(2, 2).to(self.device)
         correct = 0
         total = 0
-        
+
         for inputs, targets in self.val_loader:
             inputs, targets = inputs.to(self.device), targets.to(self.device)
             
@@ -145,15 +170,33 @@ class Trainer:
             
             running_loss += loss.item()
             _, predicted = outputs.max(1)
+            
+            for t, p in zip(targets, predicted):
+                conf_matrix[t.long(), p.long()] += 1
+
             total += targets.size(0)
             correct += predicted.eq(targets).sum().item()
         
-        return running_loss/len(self.val_loader), 100.*correct/total
+        sensitivity = conf_matrix[1, 1] / conf_matrix[1].sum()
+        specificity = conf_matrix[0, 0] / conf_matrix[0].sum()
+        accuracy = conf_matrix.diag().sum() / conf_matrix.sum()
+        
+        metrics = {
+            'loss': running_loss/len(self.val_loader),
+            'accuracy': accuracy.item() * 100,
+            'sensitivity': sensitivity.item() * 100,
+            'specificity': specificity.item() * 100
+        }
+        
+        return metrics
 
     def train(self):
+        epochs_list = []
         for epoch in range(self.config['num_epochs']):
             train_loss, train_acc = self.train_epoch(epoch)
-            val_loss, val_acc = self.validate()
+            val_metrics = self.validate()
+            val_loss = val_metrics['loss']
+            val_acc = val_metrics['accuracy']
             
             # Logging
             self.writer.add_scalar('Loss/train', train_loss, epoch)
@@ -161,8 +204,10 @@ class Trainer:
             self.writer.add_scalar('Accuracy/train', train_acc, epoch)
             self.writer.add_scalar('Accuracy/val', val_acc, epoch)
             self.writer.add_scalar('LR', self.optimizer.param_groups[0]['lr'], epoch)
+
+            epochs_list.append(epoch)
+            self.feature_visualizer.plot_feature_trends(epochs_list)
             
-            # Save history
             self.history['train_loss'].append(train_loss)
             self.history['train_acc'].append(train_acc)
             self.history['val_loss'].append(val_loss)
@@ -173,7 +218,6 @@ class Trainer:
                          f'Train Loss: {train_loss:.4f}, Train Acc: {train_acc:.2f}%, '
                          f'Val Loss: {val_loss:.4f}, Val Acc: {val_acc:.2f}%')
             
-            # Save best model
             if val_acc > self.best_val_acc:
                 self.best_val_acc = val_acc
                 torch.save({
@@ -183,6 +227,7 @@ class Trainer:
                     'best_val_acc': self.best_val_acc,
                 }, self.config['model_dir'] / 'best_model.pth')
             
+
             # Early stopping
             self.early_stopping(val_loss)
             if self.early_stopping.early_stop:
@@ -224,7 +269,8 @@ def save_model_state(model, trainer, config, save_dir='models'):
     logging.info(f"Model state saved to {save_path}")
     return save_path
 
-def save_metadata(config, results, save_dir='models'):
+def save_metadata(config,
+results, save_dir='models'):
     save_dir = Path(save_dir)
     save_dir.mkdir(parents=True, exist_ok=True)
     

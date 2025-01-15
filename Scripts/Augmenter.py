@@ -1,7 +1,7 @@
 import torch
 import random
 import numpy as np
-from PIL import Image, ImageFilter, ImageOps, ImageEnhance
+from PIL import Image, ImageOps, ImageEnhance
 from torchvision import transforms
 from typing import Tuple, Optional, List
 import logging
@@ -121,9 +121,9 @@ class BalancedAugmentationWrapper:
         self,
         dataset,
         minority_class_idx: int = 1,  # RG class index
-        mixup_prob: float = 0.2,
-        cutmix_prob: float = 0.2,
-        mixup_alpha: float = 0.2
+        mixup_prob: float = 0.4,
+        cutmix_prob: float = 0.3,
+        mixup_alpha: float = 0.4
     ):
         self.dataset = dataset
         self.minority_class_idx = minority_class_idx

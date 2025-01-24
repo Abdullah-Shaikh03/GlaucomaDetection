@@ -1,12 +1,9 @@
 data
-*.pth
-*.npz
-test.py
-*.json
 logs
 *.npy
 *.pyc
 __pycache__
-new 
 raw
+models
 Research Material
+*.tar

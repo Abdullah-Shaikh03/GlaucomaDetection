@@ -194,6 +194,24 @@ class HybridNet(nn.Module):
         # Final classification
         x = self.fc(x)
         return x
+    
+def export_model_params(model, output_file='params.txt'):
+    """
+    Export model parameters to a text file.
+    
+    Args:
+        model (torch.nn.Module): The PyTorch model to export
+        output_file (str, optional): Path to the output text file. Defaults to 'params.txt'.
+    """
+    with open(output_file, 'w') as f:
+        # Write total number of parameters
+        total_params = sum(p.numel() for p in model.parameters())
+        f.write(f"Total number of parameters: {total_params:,}\n\n")
+        
+        # Write detailed parameter information
+        f.write("Model:\n")
+        f.write(str(model) + "\n\n")
+
 
 def get_model(device):
     """
@@ -209,8 +227,8 @@ def get_model(device):
     model.to(device)
     return model
 
-# Example usage
 # if __name__ == "__main__":
 #     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 #     model = get_model(device)
 #     print(model)
+

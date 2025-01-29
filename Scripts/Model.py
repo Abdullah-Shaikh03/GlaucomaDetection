@@ -227,10 +227,8 @@ def get_model(device):
     model.to(device)
     return model
 
-# Example usage
-if __name__ == "__main__":
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    model = get_model(device)
-    export_model_params(model)
-    # print(model)
-    print(f"Model parameters exported to params.txt")
+# if __name__ == "__main__":
+#     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+#     model = get_model(device)
+#     print(model)
+

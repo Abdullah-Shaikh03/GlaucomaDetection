@@ -251,11 +251,11 @@ def save_metadata(config, results, save_dir='models'):
 def main():
     # Configuration
     config = {
-        'data_dir': Path('./data/raw'),
+        'data_dir': Path('./raw'),
         'log_dir': Path('logs/run_001'),
         'model_dir': Path('models'),
-        'num_epochs': 50,
-        'batch_size': 64,
+        'num_epochs': 100,
+        'batch_size': 32,
         'learning_rate': 1e-6,
         'max_lr': 1e-5,
         'weight_decay': 1e-5,

@@ -5,11 +5,11 @@ from torch.amp import autocast, GradScaler
 from torch.utils.tensorboard import SummaryWriter
 from tqdm import tqdm
 import numpy as np
-import logging
 from pathlib import Path
 import json
 from datetime import datetime
-import random
+import randomimport logging
+
 from losses import FocalLoss
 from Model import get_model
 from DataLoader import get_data_loaders
@@ -255,7 +255,7 @@ def main():
         'log_dir': Path('logs/run_001'),
         'model_dir': Path('models'),
         'num_epochs': 100,
-        'batch_size': 32,
+        'batch_size': 64,
         'learning_rate': 1e-6,
         'max_lr': 1e-5,
         'weight_decay': 1e-5,

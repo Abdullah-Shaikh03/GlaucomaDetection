@@ -9,3 +9,5 @@ Research Material
 *.tar.gz
 *.tar
 release-raw
+analysis_results
+visualization_output

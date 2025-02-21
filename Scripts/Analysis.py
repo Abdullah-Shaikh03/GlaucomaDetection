@@ -181,7 +181,7 @@ def main():
             print(f"Best validation accuracy: {checkpoint['best_val_acc']:.2f}%")
         
         # Get data loaders
-        data_dir = './data/raw/'  # Update this to your actual data directory
+        data_dir = './raw/'  # Update this to your actual data directory
         _, _, test_loader = get_data_loaders(data_dir, batch_size=32)
         print("Test dataset loaded successfully")
         

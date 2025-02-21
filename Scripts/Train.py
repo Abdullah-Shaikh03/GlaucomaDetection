@@ -251,8 +251,8 @@ def save_metadata(config, results, save_dir='models'):
 def main():
     # Configuration
     config = {
-        'data_dir': Path('./raw'),
-        'log_dir': Path('logs/run_001'),
+        'data_dir': Path('./release-raw/release-raw'),  
+        'log_dir': Path('logs/run_003'),
         'model_dir': Path('models'),
         'num_epochs': 100,
         'batch_size': 32,

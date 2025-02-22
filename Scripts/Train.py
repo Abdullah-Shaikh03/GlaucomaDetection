@@ -252,7 +252,7 @@ def main():
     # Configuration
     config = {
         'data_dir': Path('./release-raw/release-raw'),  
-        'log_dir': Path('logs/run_003'),
+        'log_dir': Path('logs/run_001'),
         'model_dir': Path('models'),
         'num_epochs': 100,
         'batch_size': 32,

@@ -106,7 +106,7 @@ def get_data_loaders(
     data_dir: str,
     batch_size: int = 32,
     input_size: int = 256,
-    num_workers: int = 4,
+    num_workers: int = 2,
     use_balanced_sampling: bool = True
 ) -> Tuple[DataLoader, DataLoader, DataLoader]:
     """

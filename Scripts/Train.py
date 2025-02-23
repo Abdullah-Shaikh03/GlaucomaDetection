@@ -2,6 +2,7 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 from torch.amp import autocast, GradScaler
+import random
 from torch.utils.tensorboard import SummaryWriter
 from tqdm import tqdm
 import numpy as np
@@ -111,6 +112,8 @@ class Trainer:
                 loss = self.criterion(outputs, targets)
             
             self.scaler.scale(loss).backward()
+            self.scaler.unscale_(self.optimizer)
+            torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=1.0)
             self.scaler.step(self.optimizer)
             self.scaler.update()
             
@@ -251,15 +254,15 @@ def save_metadata(config, results, save_dir='models'):
 def main():
     # Configuration
     config = {
-        'data_dir': Path('./release-raw/release-raw'),  
-        'log_dir': Path('logs/run_001'),
+        'data_dir': Path('./raw'),  
+        'log_dir': Path('logs/run_002'),
         'model_dir': Path('models'),
         'num_epochs': 100,
-        'batch_size': 32,
+        'batch_size': 31,
         'learning_rate': 1e-6,
-        'max_lr': 1e-5,
-        'weight_decay': 1e-5,
-        'early_stopping_patience': 10,
+        'max_lr': 1e-4,
+        'weight_decay': 1e-4,
+        'early_stopping_patience': 100,
         'seed': 42
     }
 

@@ -52,23 +52,22 @@ class HybridBlock(nn.Module):
     - DenseNet-style dense connections
     - Inception-style multi-scale processing
     - Squeeze-and-Excitation attention mechanism
+    - Dropout for regularization
+    - Layer normalization for stable training
     """
     def __init__(self, in_channels, out_channels, stride=1):
         super(HybridBlock, self).__init__()
         
         # VGG-style standard convolution
-        # Captures local spatial features with 3x3 receptive field
         self.vgg_conv = nn.Conv2d(in_channels, out_channels, kernel_size=3, padding=1, stride=stride)
         
         # ResNet-style residual connection
-        # Handles identity mapping or channel/spatial dimension changes
         self.res_conv = nn.Sequential(
             nn.Conv2d(in_channels, out_channels, kernel_size=1, stride=stride),
             nn.BatchNorm2d(out_channels)
         ) if in_channels != out_channels or stride != 1 else nn.Identity()
         
         # DenseNet-style dense connection
-        # Enables feature reuse and alleviates vanishing gradient problem
         self.dense_conv = nn.Sequential(
             nn.BatchNorm2d(in_channels),
             nn.ReLU(inplace=True),
@@ -76,7 +75,6 @@ class HybridBlock(nn.Module):
         )
         
         # Inception-style multi-scale feature extraction
-        # Captures features at different receptive field sizes
         self.inception_1x1 = nn.Conv2d(in_channels, out_channels // 4, kernel_size=1, stride=stride)
         self.inception_3x3 = nn.Conv2d(in_channels, out_channels // 4, kernel_size=3, padding=1, stride=stride)
         self.inception_5x5 = nn.Conv2d(in_channels, out_channels // 4, kernel_size=5, padding=2, stride=stride)
@@ -88,9 +86,13 @@ class HybridBlock(nn.Module):
         # Squeeze-and-Excitation for channel-wise attention
         self.se = SEBlock(out_channels)
         
-        # Batch normalization and ReLU for feature normalization and non-linearity
+        # Feature normalization and activation
         self.bn = nn.BatchNorm2d(out_channels)
         self.relu = nn.ReLU(inplace=True)
+        
+        # Added regularization and normalization components
+        self.dropout = nn.Dropout(p=0.3)
+        self.layer_norm = nn.LayerNorm(out_channels)  # Dynamic spatial dimensions
 
     def forward(self, x):
         # Parallel feature extraction paths
@@ -115,6 +117,12 @@ class HybridBlock(nn.Module):
         # Normalization and activation
         out = self.bn(out)
         out = self.relu(out)
+        
+        # Added regularization and normalization
+        out = self.dropout(out)
+        # Dynamically handle spatial dimensions for LayerNorm
+        out = self.layer_norm(out.permute(0, 2, 3, 1)).permute(0, 3, 1, 2)
+        
         return out
 
 class HybridNet(nn.Module):

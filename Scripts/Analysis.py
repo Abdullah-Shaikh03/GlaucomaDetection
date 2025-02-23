@@ -71,7 +71,7 @@ class ModelAnalyzer:
 
 def load_model_and_metadata(checkpoint_path, metadata_path):
     try:
-        checkpoint = torch.load(checkpoint_path)
+        checkpoint = torch.load(checkpoint_path, weights_only=False)
         print("Checkpoint contents:", checkpoint.keys())
     except Exception as e:
         print(f"Error loading checkpoint: {str(e)}")

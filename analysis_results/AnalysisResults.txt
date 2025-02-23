@@ -3,29 +3,29 @@ Glaucoma Detection Model Analysis Results
 
 Model Information:
   Architecture: HybridNet
-  Best validation accuracy: 90.00%
+  Best validation accuracy: 93.51%
 
 Test Set Performance:
-  Accuracy: 87.00%
-  Loss: 0.3098
+  Accuracy: 90.13%
+  Loss: 0.2358
 
 Classification Report:
               precision    recall  f1-score   support
 
-Non-Glaucoma       0.90      0.83      0.86       500
-    Glaucoma       0.84      0.91      0.87       500
+Non-Glaucoma       0.93      0.86      0.90       385
+    Glaucoma       0.87      0.94      0.90       385
 
-    accuracy                           0.87      1000
-   macro avg       0.87      0.87      0.87      1000
-weighted avg       0.87      0.87      0.87      1000
+    accuracy                           0.90       770
+   macro avg       0.90      0.90      0.90       770
+weighted avg       0.90      0.90      0.90       770
 
 Confusion Matrix:
-[[416  84]
- [ 46 454]]
+[[333  52]
+ [ 24 361]]
 
 Training History Summary:
-  Final train_loss: 0.0149
-  Final train_acc: 90.6651
-  Final val_loss: 0.0204
-  Final val_acc: 88.8889
+  Final train_loss: 0.0088
+  Final train_acc: 95.0488
+  Final val_loss: 0.0150
+  Final val_acc: 93.1169
   Final lr: 0.0000

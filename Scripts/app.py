@@ -1,240 +1,328 @@
-import streamlit as st
-import torch
-import torch.nn as nn
-import torchvision.transforms as transforms
-from PIL import Image
-import numpy as np
+import os
 import cv2
-from Model import HybridNet
-import plotly.graph_objects as go
-from io import BytesIO
+import numpy as np
+from tqdm import tqdm
 import matplotlib.pyplot as plt
-from skimage import filters, measure
-from scipy.ndimage import binary_fill_holes
+import argparse
+import pandas as pd
+import torch
+from torch.utils.data import Dataset, DataLoader
 
-def calculate_cdr(image):
+class FundusDataset(Dataset):
+    """Custom dataset for FUNDUS images to enable efficient GPU processing"""
+    def __init__(self, root_dir, split, cls, image_extension='.jpg'):
+        self.image_dir = os.path.join(root_dir, split, cls)
+        self.image_extension = image_extension
+        self.image_files = []
+        
+        if os.path.exists(self.image_dir):
+            self.image_files = [f for f in os.listdir(self.image_dir) 
+                               if f.lower().endswith(self.image_extension)]
+        
+    def __len__(self):
+        return len(self.image_files)
+    
+    def __getitem__(self, idx):
+        img_name = self.image_files[idx]
+        img_path = os.path.join(self.image_dir, img_name)
+        
+        # Read image
+        img = cv2.imread(img_path)
+        if img is None:
+            # Return a placeholder if image can't be read
+            return np.zeros((224, 224, 3), dtype=np.uint8)
+        
+        # Convert BGR to RGB
+        img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+        
+        # Convert to tensor and normalize to 0-1 range
+        img_tensor = torch.from_numpy(img).float() / 255.0
+        # Reorder dims to [C, H, W] format for PyTorch
+        img_tensor = img_tensor.permute(2, 0, 1)
+        
+        return img_tensor
+
+def calculate_dataset_stats_gpu(dataset_path, image_extension='.jpg', sample_size=None, 
+                           split_stats=True, class_stats=True, batch_size=16):
     """
-    Calculate Cup-to-Disc Ratio from fundus image
-    Returns CDR value and segmented image
+    Calculate mean and standard deviation of images in the dataset using GPU acceleration.
     """
-    # Convert to grayscale if needed
-    if len(image.shape) == 3:
-        gray = cv2.cvtColor(image, cv2.COLOR_RGB2GRAY)
-    else:
-        gray = image
+    stats_dict = {}
+    splits = ['train', 'test', 'validation']
+    classes = ['NRG', 'RG']
     
-    # Enhance contrast
-    clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8,8))
-    enhanced = clahe.apply(gray)
+    # Check if GPU is available
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    print(f"Using device: {device}")
     
-    # Detect optic disc
-    disc_thresh = filters.threshold_otsu(enhanced)
-    disc_mask = enhanced > disc_thresh
-    disc_mask = binary_fill_holes(disc_mask)
+    # Initialize arrays for collecting all means and stds
+    all_means = []
+    all_stds = []
     
-    # Find the largest connected component (optic disc)
-    labels = measure.label(disc_mask)
-    regions = measure.regionprops(labels)
-    if not regions:
-        return 0, None, None
+    # Process each split and class
+    for split in splits:
+        if split_stats:
+            split_means = []
+            split_stds = []
+            
+        for cls in classes:
+            # Create dataset
+            dataset = FundusDataset(dataset_path, split, cls, image_extension)
+            
+            # Skip if empty
+            if len(dataset) == 0:
+                print(f"Warning: No images found in {split}/{cls}, skipping.")
+                continue
+                
+            # Sample if specified
+            if sample_size and sample_size < len(dataset):
+                indices = torch.randperm(len(dataset))[:sample_size]
+                dataset = torch.utils.data.Subset(dataset, indices)
+            
+            # Create dataloader
+            dataloader = DataLoader(dataset, batch_size=batch_size, num_workers=4, pin_memory=True)
+            
+            # Initialize arrays for this class
+            if class_stats:
+                class_means = []
+                class_stds = []
+            
+            print(f"Processing {len(dataset)} images in {split}/{cls}...")
+            
+            # Process batches
+            for batch in tqdm(dataloader):
+                batch = batch.to(device)
+                
+                # Calculate mean and std for each image in batch
+                batch_mean = torch.mean(batch, dim=[2, 3])
+                batch_std = torch.std(batch, dim=[2, 3])
+                
+                # Move back to CPU for numpy operations
+                batch_mean = batch_mean.cpu().numpy()
+                batch_std = batch_std.cpu().numpy()
+                
+                # Append to appropriate lists
+                all_means.extend(batch_mean)
+                all_stds.extend(batch_std)
+                
+                if split_stats:
+                    split_means.extend(batch_mean)
+                    split_stds.extend(batch_std)
+                
+                if class_stats:
+                    class_means.extend(batch_mean)
+                    class_stds.extend(batch_std)
+            
+            # Calculate class statistics if requested
+            if class_stats and len(class_means) > 0:
+                class_means = np.array(class_means)
+                class_stds = np.array(class_stds)
+                class_overall_mean = np.mean(class_means, axis=0)
+                class_overall_std = np.mean(class_stds, axis=0)
+                stats_dict[f"{split}_{cls}_mean"] = class_overall_mean
+                stats_dict[f"{split}_{cls}_std"] = class_overall_std
+        
+        # Calculate split statistics if requested
+        if split_stats and len(split_means) > 0:
+            split_means = np.array(split_means)
+            split_stds = np.array(split_stds)
+            split_overall_mean = np.mean(split_means, axis=0)
+            split_overall_std = np.mean(split_stds, axis=0)
+            stats_dict[f"{split}_mean"] = split_overall_mean
+            stats_dict[f"{split}_std"] = split_overall_std
     
-    disc_region = max(regions, key=lambda x: x.area)
-    disc_mask = labels == disc_region.label
-    disc_area = disc_region.area
+    # Calculate overall statistics
+    if len(all_means) > 0:
+        all_means = np.array(all_means)
+        all_stds = np.array(all_stds)
+        overall_mean = np.mean(all_means, axis=0)
+        overall_std = np.mean(all_stds, axis=0)
+        stats_dict["overall_mean"] = overall_mean
+        stats_dict["overall_std"] = overall_std
     
-    # Detect cup region (brighter part within disc)
-    cup_thresh = filters.threshold_otsu(enhanced[disc_mask])
-    cup_mask = enhanced > cup_thresh
-    cup_mask = cup_mask & disc_mask
-    cup_mask = binary_fill_holes(cup_mask)
+    # Scale back to 0-255 range
+    for key in stats_dict:
+        stats_dict[key] = stats_dict[key] * 255
     
-    # Calculate cup area
-    cup_area = np.sum(cup_mask)
-    
-    # Calculate CDR
-    cdr = cup_area / disc_area if disc_area > 0 else 0
-    
-    # Create visualization
-    visualization = np.zeros((*gray.shape, 3), dtype=np.uint8)
-    visualization[disc_mask] = [0, 255, 0]  # Green for disc
-    visualization[cup_mask] = [255, 0, 0]   # Red for cup
-    
-    return cdr, visualization, {'disc_area': disc_area, 'cup_area': cup_area}
+    return stats_dict
 
-def classify_cdr(cdr):
+def plot_class_histograms_gpu(dataset_path, image_extension='.jpg', sample_size=5):
     """
-    Classify glaucoma risk based on CDR value
+    Plot histograms of pixel values using GPU acceleration.
     """
-    if cdr < 0.4:
-        return "Normal", "Low Risk"
-    elif 0.4 <= cdr < 0.7:
-        return "Suspicious", "Medium Risk"
-    else:
-        return "Abnormal", "High Risk"
-
-def load_model(model_path):
-    """Load the trained model"""
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    model = HybridNet(num_classes=2)
-    checkpoint = torch.load(model_path, map_location=device)
-    if "model_state_dict" in checkpoint:
-        checkpoint = checkpoint["model_state_dict"]
-    model.load_state_dict(checkpoint)
-    model.eval()
-    return model, device
-
-def preprocess_image(image):
-    """Preprocess the input image for model prediction"""
-    if image.mode != 'RGB':
-        image = image.convert('RGB')
+    splits = ['train']  # Use only training data for histograms
+    classes = ['NRG', 'RG']
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     
-    preprocess = transforms.Compose([
-        transforms.Resize((224, 224)),
-        transforms.ToTensor(),
-        transforms.Normalize(mean=[0.485, 0.456, 0.406], 
-                           std=[0.229, 0.224, 0.225])
-    ])
+    fig, axs = plt.subplots(len(classes), 3, figsize=(15, 5*len(classes)))
     
-    return preprocess(image)
+    for i, cls in enumerate(classes):
+        # Create dataset
+        dataset = FundusDataset(dataset_path, splits[0], cls, image_extension)
+        
+        if len(dataset) == 0:
+            print(f"Warning: No images found in {splits[0]}/{cls}, skipping.")
+            continue
+            
+        # Sample if specified
+        if sample_size and sample_size < len(dataset):
+            indices = torch.randperm(len(dataset))[:sample_size]
+            sampled_indices = indices.tolist()
+        else:
+            sampled_indices = range(min(len(dataset), sample_size))
+        
+        # Combine pixel values from all sample images
+        r_values = []
+        g_values = []
+        b_values = []
+        
+        for idx in sampled_indices:
+            img_tensor = dataset[idx].to(device)
+            
+            # Move to CPU for histogram creation
+            img_np = (img_tensor.cpu().numpy() * 255).astype(np.uint8)
+            
+            # Collect pixel values
+            r_values.extend(img_np[0].flatten())
+            g_values.extend(img_np[1].flatten())
+            b_values.extend(img_np[2].flatten())
+        
+        # Plot histograms
+        axs[i, 0].hist(r_values, bins=50, color='red', alpha=0.7)
+        axs[i, 0].set_title(f"Red Channel - {cls}")
+        axs[i, 0].set_xlabel('Pixel Value')
+        axs[i, 0].set_ylabel('Frequency')
+        
+        axs[i, 1].hist(g_values, bins=50, color='green', alpha=0.7)
+        axs[i, 1].set_title(f"Green Channel - {cls}")
+        axs[i, 1].set_xlabel('Pixel Value')
+        
+        axs[i, 2].hist(b_values, bins=50, color='blue', alpha=0.7)
+        axs[i, 2].set_title(f"Blue Channel - {cls}")
+        axs[i, 2].set_xlabel('Pixel Value')
+    
+    plt.tight_layout()
+    plt.savefig('class_histograms.png')
+    plt.close()
 
-def get_prediction(model, image_tensor, device):
-    """Get model prediction and confidence score"""
-    with torch.no_grad():
-        model = model.to(device)
-        image_tensor = image_tensor.unsqueeze(0).to(device)
-        outputs = model(image_tensor)
-        probabilities = torch.nn.functional.softmax(outputs, dim=1)
-        prediction = torch.argmax(probabilities, dim=1)
-        confidence = torch.max(probabilities).item()
+def count_images(dataset_path, image_extension='.jpg'):
+    """
+    Count the number of images in each split and class.
+    (No GPU acceleration needed for this function)
+    """
+    splits = ['train', 'test', 'validation']
+    classes = ['NRG', 'RG']
     
-    return prediction.item(), confidence
+    counts = []
+    
+    for split in splits:
+        for cls in classes:
+            class_dir = os.path.join(dataset_path, split, cls)
+            if not os.path.exists(class_dir):
+                count = 0
+            else:
+                count = len([f for f in os.listdir(class_dir) 
+                            if f.lower().endswith(image_extension)])
+            
+            counts.append({
+                'Split': split,
+                'Class': cls,
+                'Count': count
+            })
+    
+    # Create DataFrame
+    counts_df = pd.DataFrame(counts)
+    
+    # Add totals
+    split_totals = counts_df.groupby('Split')['Count'].sum().reset_index()
+    split_totals['Class'] = 'Total'
+    
+    class_totals = counts_df.groupby('Class')['Count'].sum().reset_index()
+    class_totals['Split'] = 'Total'
+    
+    total = counts_df['Count'].sum()
+    overall_total = pd.DataFrame([{'Split': 'Total', 'Class': 'Total', 'Count': total}])
+    
+    counts_df = pd.concat([counts_df, split_totals, class_totals, overall_total])
+    
+    return counts_df
 
 def main():
-    st.set_page_config(page_title="Glaucoma Detection System", layout="wide")
+    parser = argparse.ArgumentParser(description='Calculate mean and std for hierarchical FUNDUS dataset using GPU')
+    parser.add_argument('--dataset_path', type=str, required=True, help='Path to the dataset root directory')
+    parser.add_argument('--extension', type=str, default='.jpg', help='Image file extension')
+    parser.add_argument('--sample_size', type=int, default=None, help='Number of images to sample per class')
+    parser.add_argument('--plot_histograms', action='store_true', help='Plot histograms of sample images')
+    parser.add_argument('--batch_size', type=int, default=16, help='Batch size for processing')
     
-    st.title("Glaucoma Detection System")
-    st.markdown("""
-    This application analyzes fundus images for glaucoma detection using:
-    1. Deep Learning Model Analysis
-    2. Cup-to-Disc Ratio (CDR) Calculation
-    """)
+    args = parser.parse_args()
     
-    st.sidebar.title("About")
-    st.sidebar.info("""
-    Hybrid analysis system combining:
-    - Deep Learning (Accuracy: 90.13%)
-    - CDR Analysis
-    - Clinical Risk Assessment
-    """)
+    # Check if CUDA is available
+    if torch.cuda.is_available():
+        print(f"GPU detected: {torch.cuda.get_device_name(0)}")
+        print(f"CUDA version: {torch.version.cuda}")
+    else:
+        print("No GPU detected, falling back to CPU.")
     
-    uploaded_file = st.file_uploader("Choose a fundus image...", type=["jpg", "jpeg", "png"])
+    # Count images in dataset
+    print("Counting images in dataset...")
+    counts_df = count_images(args.dataset_path, args.extension)
+    print("\nImage counts:")
+    print(counts_df.to_string(index=False))
     
-    if uploaded_file is not None:
-        # Load and process image
-        image = Image.open(uploaded_file)
-        image_np = np.array(image)
+    # Calculate statistics using GPU
+    print("\nCalculating statistics using GPU acceleration...")
+    stats_dict = calculate_dataset_stats_gpu(args.dataset_path, args.extension, args.sample_size, 
+                                           batch_size=args.batch_size)
+    
+    # Print results
+    print("\nDataset Statistics:")
+    for key, value in stats_dict.items():
+        print(f"{key}: {value}")
+    
+    # Save results to file
+    with open('dataset_stats.txt', 'w') as f:
+        f.write(f"Dataset: {args.dataset_path}\n\n")
+        f.write("Image counts:\n")
+        f.write(counts_df.to_string(index=False))
+        f.write("\n\nDataset Statistics:\n")
+        for key, value in stats_dict.items():
+            f.write(f"{key}: {value}\n")
+    
+    # Create a structured DataFrame for statistics
+    stats_rows = []
+    for key, value in stats_dict.items():
+        parts = key.split('_')
+        if len(parts) == 3:  # split_class_stat
+            split, cls, stat = parts
+        elif len(parts) == 2:  # split_stat or overall_stat
+            if parts[0] == 'overall':
+                split = 'Overall'
+                cls = 'All'
+                stat = parts[1]
+            else:
+                split = parts[0]
+                cls = 'All'
+                stat = parts[1]
         
-        # Calculate CDR
-        cdr, cdr_visualization, measurements = calculate_cdr(image_np)
-        cdr_status, risk_level = classify_cdr(cdr)
-        
-        # Model prediction
-        model, device = load_model("../models/best_model.pth")
-        image_tensor = preprocess_image(image)
-        prediction, confidence = get_prediction(model, image_tensor, device)
-        
-        # Display results in columns
-        col1, col2, col3 = st.columns([1, 1, 1])
-        
-        with col1:
-            st.subheader("Original Image")
-            st.image(image, caption="Uploaded Fundus Image", use_column_width=True)
-        
-        with col2:
-            st.subheader("CDR Analysis")
-            st.image(cdr_visualization, caption="Cup (Red) and Disc (Green) Segmentation", use_column_width=True)
-        
-        with col3:
-            st.subheader("Measurements")
-            st.metric("Cup-to-Disc Ratio (CDR)", f"{cdr:.3f}")
-            st.metric("CDR Status", cdr_status)
-            st.metric("Risk Level", risk_level)
-        
-        # Combined Analysis Results
-        st.subheader("Combined Analysis Results")
-        
-        # Create two columns for deep learning and CDR results
-        result_col1, result_col2 = st.columns(2)
-        
-        with result_col1:
-            st.markdown("### Deep Learning Analysis")
-
-            result = "Glaucoma Detected" if prediction == 1 else "No Glaucoma Detected"
-            confidence_percent = confidence * 100
-            
-            fig1 = go.Figure(go.Indicator(
-                mode = "gauge+number",
-                value = confidence_percent,
-                title = {'text': f"Model Confidence"},
-                gauge = {
-                    'axis': {'range': [None, 100]},
-                    'bar': {'color': "darkblue"},
-                    'steps': [
-                        {'range': [0, 50], 'color': "lightgray"},
-                        {'range': [50, 75], 'color': "gray"},
-                        {'range': [75, 100], 'color': "darkgray"}
-                    ],
-                    'threshold': {
-                        'line': {'color': "red", 'width': 4},
-                        'thickness': 0.75,
-                        'value': 90
-                    }
-                }
-            ))
-            st.plotly_chart(fig1)
-        
-        with result_col2:
-            st.markdown("### CDR Analysis")
-            fig2 = go.Figure(go.Indicator(
-                mode = "gauge+number",
-                value = cdr * 100,
-                title = {'text': f"Cup-to-Disc Ratio"},
-                gauge = {
-                    'axis': {'range': [0, 100]},
-                    'bar': {'color': "darkred"},
-                    'steps': [
-                        {'range': [0, 40], 'color': "lightgreen"},
-                        {'range': [40, 70], 'color': "yellow"},
-                        {'range': [70, 100], 'color': "red"}
-                    ],
-                    'threshold': {
-                        'line': {'color': "black", 'width': 4},
-                        'thickness': 0.75,
-                        'value': 70
-                    }
-                }
-            ))
-            st.plotly_chart(fig2)
-        
-        # Final Assessment
-        st.subheader("Final Assessment")
-        
-        # Combine both analyses for final assessment
-        dl_risk = "High" if confidence_percent > 90 else "Medium" if confidence_percent > 70 else "Low"
-        final_risk = "High" if (dl_risk == "High" and risk_level == "High Risk") else \
-                    "Low" if (dl_risk == "Low" and risk_level == "Low Risk") else "Medium"
-        
-        st.markdown(f"""
-        ### Risk Factors:
-        1. **Deep Learning Analysis**: {result} (Confidence: {confidence_percent:.1f}%)
-        2. **CDR Analysis**: {cdr_status} (CDR: {cdr:.3f})
-        3. **Overall Risk Level**: {final_risk}
-        
-        **Important Notice**: 
-        - This is an automated screening tool and should not replace professional medical diagnosis.
-        - Please consult with an ophthalmologist for proper diagnosis and treatment.
-        - CDR is one of many factors in glaucoma diagnosis and should be considered alongside other clinical findings.
-        """)
+        stats_rows.append({
+            'Split': split,
+            'Class': cls,
+            'Statistic': stat,
+            'R': value[0],
+            'G': value[1],
+            'B': value[2]
+        })
+    
+    stats_df = pd.DataFrame(stats_rows)
+    stats_df.to_csv('dataset_stats.csv', index=False)
+    print("\nDetailed statistics saved to 'dataset_stats.csv'")
+    
+    # Plot histograms if requested
+    if args.plot_histograms:
+        print("Generating histograms using GPU acceleration...")
+        plot_class_histograms_gpu(args.dataset_path, args.extension, args.sample_size)
+        print("Class histograms saved to 'class_histograms.png'")
 
 if __name__ == "__main__":
     main()

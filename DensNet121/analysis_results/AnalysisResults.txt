@@ -1,0 +1,28 @@
+Model Analysis Results
+======================
+
+Model Architecture: DenseNet121Model
+Best validation accuracy: 95.58%
+
+Test Accuracy: 93.25%
+Test Loss: 0.1820
+
+Classification Report:
+              precision    recall  f1-score   support
+
+           0       0.95      0.91      0.93       385
+           1       0.92      0.95      0.93       385
+
+    accuracy                           0.93       770
+   macro avg       0.93      0.93      0.93       770
+weighted avg       0.93      0.93      0.93       770
+
+Confusion Matrix:
+[[352  33]
+ [ 19 366]]
+
+Final train_loss: 0.0051
+Final train_acc: 97.3868
+Final val_loss: 0.0126
+Final val_acc: 95.5844
+Final lr: 0.0001

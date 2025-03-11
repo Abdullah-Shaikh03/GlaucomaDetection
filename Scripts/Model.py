@@ -1,6 +1,8 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+import torchvision.models as models
+
 
 class SEBlock(nn.Module):
     """
@@ -152,20 +154,6 @@ def export_model_params(model, output_file='params.txt'):
         f.write(str(model) + "\n\n")
 
 
-def get_model(device):
-    """
-    Utility function to instantiate and move model to appropriate device.
-    
-    Args:
-    - device: Computation device (CPU/GPU)
-    
-    Returns:
-    - Initialized HybridNet model
-    """
-    model = HybridNet(num_classes=2)
-    model.to(device)
-    return model
-
 def count_parameters(model):
     """
     Count the total number of parameters in a PyTorch model.
@@ -177,6 +165,74 @@ def count_parameters(model):
     - Total number of parameters
     """
     return sum(p.numel() for p in model.parameters() if p.requires_grad)
+
+
+# Import pretrained DensNet121
+class DenseNet121Model(nn.Module):
+    def __init__(self, num_classes=1000, pretrained=True):
+        super(DenseNet121Model, self).__init__()
+        self.model = models.densenet121(pretrained=pretrained)
+        
+        # Modify the classifier for custom number of classes
+        in_features = self.model.classifier.in_features
+        self.model.classifier = nn.Linear(in_features, num_classes)
+    
+    def forward(self, x):
+        return self.model(x)
+
+
+class ResNet50Model(nn.Module):
+    def __init__(self, num_classes=1000, pretrained=True):
+        super(ResNet50Model, self).__init__()
+        self.model = models.resnet50(pretrained=pretrained)
+
+        # Modify the classifier for custom number of classes
+        in_features = self.model.fc.in_features
+        self.model.fc = nn.Linear(in_features, num_classes)
+
+    def forward(self, x):
+        return self.model(x)
+    
+
+class VGG19Model(nn.Module):
+    def __init__(self, num_classes=1000, pretrained=True):
+        super(VGG19Model, self).__init__()
+        self.model = models.vgg19(pretrained=pretrained)
+
+        # Modify the classifier for custom number of classes
+        in_features = self.model.classifier[6].in_features
+        self.model.classifier[6] = nn.Linear(in_features, num_classes)
+
+    def forward(self, x):
+        return self.model(x)
+
+
+def get_model(device):
+    """
+    Utility function to instantiate and move model to appropriate device.
+    
+    Args:
+    - device: Computation device (CPU/GPU)
+    
+    Returns:
+    - Initialized HybridNet model
+    """
+
+    # HybridNet
+    # model = HybridNet(num_classes=2)
+
+    # DenseNet121
+    # model = DenseNet121Model(num_classes=2, pretrained=True)
+
+    # ResNet50
+    # model = ResNet50Model(num_classes=2, pretrained=True)
+
+    # VGG-19
+    model = VGG19Model(num_classes=2, pretrained=True)
+
+
+    model.to(device)
+    return model
 
 
 if __name__ == "__main__":

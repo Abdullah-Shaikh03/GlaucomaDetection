@@ -31,6 +31,8 @@ class EarlyStopping:
             self.best_loss = val_loss
         elif val_loss > self.best_loss - self.min_delta:
             self.counter += 1
+            if self.verbose:
+                print(f"EarlyStopping counter: {self.counter}/{self.patience}")
             if self.counter >= self.patience:
                 self.early_stop = True
         else:
@@ -255,14 +257,14 @@ def main():
     # Configuration
     config = {
         'data_dir': Path('./raw'),  
-        'log_dir': Path('logs/run_002'),
+        'log_dir': Path('logs/run_004'),
         'model_dir': Path('models'),
         'num_epochs': 100,
         'batch_size': 31,
         'learning_rate': 1e-6,
         'max_lr': 1e-4,
         'weight_decay': 1e-4,
-        'early_stopping_patience': 100,
+        'early_stopping_patience': 5,
         'seed': 42
     }
 

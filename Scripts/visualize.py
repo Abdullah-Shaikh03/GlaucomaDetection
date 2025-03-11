@@ -3,32 +3,40 @@ matplotlib.use('Agg')  # Use non-interactive backend
 import matplotlib.pyplot as plt
 import numpy as np
 import seaborn as sns
+import json
+import torch
+from torchvision.utils import make_grid
 
 class ModelVisualizer:
-    def __init__(self, analysis_results_path):
-        self.results = np.load(analysis_results_path)
+    def __init__(self, analysis_results_path, metadata_path):
+        self.results = np.load(analysis_results_path, allow_pickle=True)
+        with open(metadata_path, 'r') as f:
+            self.metadata = json.load(f)
+        self.class_names = self.metadata.get('class_names', ['Class 0', 'Class 1'])
     
     def plot_training_history(self, history_file, output_path='analysis_results/training_history.png'):
         """Plot training history."""
         history = np.load(history_file, allow_pickle=True).item()
         
-        fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(10, 10))
+        fig, axes = plt.subplots(2, 1, figsize=(10, 10))
         
         # Plot accuracy
-        ax1.plot(history['train_acc'], label='Train Accuracy')
-        ax1.plot(history['val_acc'], label='Validation Accuracy')
-        ax1.set_title('Model Accuracy')
-        ax1.set_ylabel('Accuracy')
-        ax1.set_xlabel('Epoch')
-        ax1.legend()
+        if 'train_acc' in history and 'val_acc' in history:
+            axes[0].plot(history['train_acc'], label='Train Accuracy')
+            axes[0].plot(history['val_acc'], label='Validation Accuracy')
+            axes[0].set_title('Model Accuracy')
+            axes[0].set_ylabel('Accuracy')
+            axes[0].set_xlabel('Epoch')
+            axes[0].legend()
         
         # Plot loss
-        ax2.plot(history['train_loss'], label='Train Loss')
-        ax2.plot(history['val_loss'], label='Validation Loss')
-        ax2.set_title('Model Loss')
-        ax2.set_ylabel('Loss')
-        ax2.set_xlabel('Epoch')
-        ax2.legend()
+        if 'train_loss' in history and 'val_loss' in history:
+            axes[1].plot(history['train_loss'], label='Train Loss')
+            axes[1].plot(history['val_loss'], label='Validation Loss')
+            axes[1].set_title('Model Loss')
+            axes[1].set_ylabel('Loss')
+            axes[1].set_xlabel('Epoch')
+            axes[1].legend()
         
         plt.tight_layout()
         plt.savefig(output_path)
@@ -39,43 +47,70 @@ class ModelVisualizer:
         cm = self.results['confusion_matrix']
         
         plt.figure(figsize=(10, 8))
-        sns.heatmap(cm, annot=True, fmt='d', cmap='Blues')
+        sns.heatmap(cm, annot=True, fmt='d', cmap='Blues', xticklabels=self.class_names, yticklabels=self.class_names)
         plt.title('Confusion Matrix')
         plt.ylabel('True Label')
         plt.xlabel('Predicted Label')
         plt.savefig(output_path)
         plt.close()
 
-    def plot_feature_maps(self, output_path='analysis_results/feature_maps.png'):
-        """Plot feature maps."""
-        feature_maps = self.results['feature_maps'][0]  # First sample
-        n_features = min(16, feature_maps.shape[0])
+    def plot_feature_maps(self, model, sample_input, output_path='analysis_results/feature_maps.png'):
+        """Plot feature maps from the first convolutional layer."""
+        feature_maps = None
         
-        fig, axs = plt.subplots(4, 4, figsize=(12, 12))
-        for idx in range(n_features):
-            i, j = idx // 4, idx % 4
-            axs[i, j].imshow(feature_maps[idx], cmap='viridis')
-            axs[i, j].axis('off')
+        def hook(module, input, output):
+            nonlocal feature_maps
+            feature_maps = output.detach().cpu()
         
-        plt.suptitle('Feature Maps from First Convolutional Layer')
-        plt.tight_layout()
-        plt.savefig(output_path)
-        plt.close()
+        # Identify first convolutional layer dynamically
+        for layer in model.modules():
+            if isinstance(layer, torch.nn.Conv2d):
+                hook_handle = layer.register_forward_hook(hook)
+                break
+        
+        with torch.no_grad():
+            model(sample_input)
+        hook_handle.remove()
+        
+        if feature_maps is not None:
+            n_features = min(16, feature_maps.shape[1])
+            grid = make_grid(feature_maps[0][:n_features], nrow=4, normalize=True)
+            
+            plt.figure(figsize=(12, 12))
+            plt.imshow(grid.permute(1, 2, 0))
+            plt.axis('off')
+            plt.title('Feature Maps from First Convolutional Layer')
+            plt.savefig(output_path)
+            plt.close()
 
     def print_metrics(self):
         """Print test metrics."""
         print(f"Test Accuracy: {self.results['test_accuracy']:.2f}%")
         print(f"Test Loss: {self.results['test_loss']:.4f}")
 
+
 def main():
     # Example usage
-    visualizer = ModelVisualizer('models/analysis_results.npz')
+    metadata_path = 'models/metadata.json'
+    visualizer = ModelVisualizer('models/analysis_results.npz', metadata_path)
     
     # Generate all visualizations
     visualizer.plot_training_history('models/training_history.npy')
     visualizer.plot_confusion_matrix()
-    visualizer.plot_feature_maps()
     visualizer.print_metrics()
+    
+    # Load model and extract feature maps
+    from Model import get_model  # Ensure correct import
+    import torch
+    
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    model = get_model(device)
+    model.load_state_dict(torch.load('models/model_state.pth', map_location=device, weights_only=False)['model_state_dict'])
+    model.eval()
+    
+    # Get a sample input
+    sample_input = torch.rand(1, 3, 224, 224).to(device)  # Modify shape as per dataset
+    visualizer.plot_feature_maps(model, sample_input)
 
 if __name__ == "__main__":
     main()

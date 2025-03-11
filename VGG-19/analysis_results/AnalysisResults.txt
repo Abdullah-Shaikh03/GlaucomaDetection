@@ -1,0 +1,28 @@
+Model Analysis Results
+======================
+
+Model Architecture: VGG19Model
+Best validation accuracy: 94.29%
+
+Test Accuracy: 92.08%
+Test Loss: 0.1972
+
+Classification Report:
+              precision    recall  f1-score   support
+
+           0       0.92      0.92      0.92       385
+           1       0.92      0.92      0.92       385
+
+    accuracy                           0.92       770
+   macro avg       0.92      0.92      0.92       770
+weighted avg       0.92      0.92      0.92       770
+
+Confusion Matrix:
+[[355  30]
+ [ 31 354]]
+
+Final train_loss: 0.0107
+Final train_acc: 94.1110
+Final val_loss: 0.0115
+Final val_acc: 93.2468
+Final lr: 0.0001

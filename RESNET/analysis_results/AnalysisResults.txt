@@ -1,0 +1,28 @@
+Model Analysis Results
+======================
+
+Model Architecture: ResNet50Model
+Best validation accuracy: 95.06%
+
+Test Accuracy: 92.73%
+Test Loss: 0.1812
+
+Classification Report:
+              precision    recall  f1-score   support
+
+           0       0.93      0.93      0.93       385
+           1       0.93      0.92      0.93       385
+
+    accuracy                           0.93       770
+   macro avg       0.93      0.93      0.93       770
+weighted avg       0.93      0.93      0.93       770
+
+Confusion Matrix:
+[[358  27]
+ [ 29 356]]
+
+Final train_loss: 0.0056
+Final train_acc: 97.0118
+Final val_loss: 0.0133
+Final val_acc: 93.5065
+Final lr: 0.0001

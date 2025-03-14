@@ -6,6 +6,10 @@ import seaborn as sns
 import json
 import torch
 from torchvision.utils import make_grid
+ # Load model and extract feature maps
+from Model import get_model  # Ensure correct import
+import torch
+    
 
 class ModelVisualizer:
     def __init__(self, analysis_results_path, metadata_path):
@@ -57,31 +61,34 @@ class ModelVisualizer:
     def plot_feature_maps(self, model, sample_input, output_path='analysis_results/feature_maps.png'):
         """Plot feature maps from the first convolutional layer."""
         feature_maps = None
-        
+    
         def hook(module, input, output):
             nonlocal feature_maps
             feature_maps = output.detach().cpu()
-        
-        # Identify first convolutional layer dynamically
+    
+    # Identify first convolutional layer dynamically
         for layer in model.modules():
             if isinstance(layer, torch.nn.Conv2d):
                 hook_handle = layer.register_forward_hook(hook)
                 break
-        
+    
         with torch.no_grad():
             model(sample_input)
         hook_handle.remove()
-        
+    
         if feature_maps is not None:
             n_features = min(16, feature_maps.shape[1])
-            grid = make_grid(feature_maps[0][:n_features], nrow=4, normalize=True)
-            
-            plt.figure(figsize=(12, 12))
-            plt.imshow(grid.permute(1, 2, 0))
-            plt.axis('off')
-            plt.title('Feature Maps from First Convolutional Layer')
+            fig, axes = plt.subplots(4, 4, figsize=(12, 12))  # 4x4 grid for 16 feature maps
+            axes = axes.flatten()
+    
+            for i in range(n_features):
+                axes[i].imshow(feature_maps[0, i].numpy(), cmap='gray')
+                axes[i].axis('off')
+    
+            plt.suptitle('Feature Maps from First Convolutional Layer')
             plt.savefig(output_path)
             plt.close()
+    
 
     def print_metrics(self):
         """Print test metrics."""
@@ -99,10 +106,7 @@ def main():
     visualizer.plot_confusion_matrix()
     visualizer.print_metrics()
     
-    # Load model and extract feature maps
-    from Model import get_model  # Ensure correct import
-    import torch
-    
+   
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     model = get_model(device)
     model.load_state_dict(torch.load('models/model_state.pth', map_location=device, weights_only=False)['model_state_dict'])

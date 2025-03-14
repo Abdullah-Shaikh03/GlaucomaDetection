@@ -222,13 +222,13 @@ def get_model(device):
     # model = HybridNet(num_classes=2)
 
     # DenseNet121
-    # model = DenseNet121Model(num_classes=2, pretrained=True)
+    model = DenseNet121Model(num_classes=2)
 
     # ResNet50
     # model = ResNet50Model(num_classes=2, pretrained=True)
 
     # VGG-19
-    model = VGG19Model(num_classes=2, pretrained=True)
+    # model = VGG19Model(num_classes=2, pretrained=True)
 
 
     model.to(device)
